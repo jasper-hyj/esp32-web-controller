@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ESP32 Controller</title>
+  </head>
+  <body>
+    <h1>ESP32 Controller</h1>
+    <button type="button" onclick="sendButtonPress()" id="info">Hello!</button>
+
+    <script>
+      "use strict";
+      class WebSocketHandler {
+        constructor(renderer, statusDisplay, simulator) {
+          this.socket = null; // Socket for websocket connection
+          this.reconnectTimeout = null; // Timeout timer
+          this.reconnectDelay = 2000;
+        }
+
+        connect() {
+          if (
+            this.socket &&
+            (this.socket.readyState === WebSocket.OPEN ||
+              this.socket.readyState === WebSocket.CONNECTING)
+          ) {
+            return;
+          }
+
+          this.socket = new WebSocket("ws://" + location.hostname + ":81");
+
+          this.socket.onopen = () => {
+            if (this.reconnectTimeout) {
+              clearTimeout(this.reconnectTimeout);
+              this.reconnectDelay = 2000;
+              this.reconnectTimeout = null;
+            }
+          };
+
+          this.socket.onclose = this.handleDisconnect.bind(this);
+          this.socket.onerror = this.handleDisconnect.bind(this);
+        }
+
+        handleDisconnect() {
+          if (!this.reconnectTimeout) {
+            this.reconnectTimeout = setTimeout(() => {
+              this.reconnectTimeout = null;
+              this.connect();
+              this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000); // cap at 30s
+            }, this.reconnectDelay);
+          }
+        }
+      }
+
+      let wsHandler;
+
+      function sendButtonPress() {
+        if (
+          wsHandler.socket &&
+          wsHandler.socket.readyState === WebSocket.OPEN
+        ) {
+          wsHandler.socket.send(JSON.stringify({ info: "Hello!" }));
+        }
+      }
+
+      window.onload = () => {
+        wsHandler = new WebSocketHandler();
+        wsHandler.connect();
+
+        window.addEventListener("online", () => {
+          if (
+            !wsHandler.socket ||
+            wsHandler.socket.readyState === WebSocket.CLOSED
+          ) {
+            wsHandler.connect();
+          }
+        });
+
+        window.onbeforeunload = () => {
+          if (
+            wsHandler.socket &&
+            wsHandler.socket.readyState === WebSocket.OPEN
+          ) {
+            wsHandler.socket.close();
+          }
+        };
+      };
+    </script>
+  </body>
+</html>
